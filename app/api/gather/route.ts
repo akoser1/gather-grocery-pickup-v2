@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { products, stores, priceFor } from '../../catalog';
-import { db, hash, password, seed, current, check, rows, allowed, snapshot, failure } from './server';
+import { db, hash, password, seed, current, check, rows, allowed, failure } from './server';
+import { snapshot } from './snapshot';
 
 export async function GET() { try {
     await seed();
