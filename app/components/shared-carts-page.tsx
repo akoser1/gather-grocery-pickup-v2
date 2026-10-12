@@ -1,8 +1,9 @@
 'use client';
 import { Users } from 'lucide-react';
+import type { Snapshot } from '../types';
 
 type Props = {
-    data: any; user: any; busy: boolean;
+    data: Snapshot; user: any; busy: boolean;
     act: (payload: any) => Promise<any>;
     onShop: () => void;
     onSelectStore: (store: string) => void;
