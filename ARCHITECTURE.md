@@ -56,3 +56,7 @@ The shopping view, cart sidebar and checkout modal remain in the controller for 
 ### Verification gate
 
 This change should be merged only after `npm run typecheck`, `npm run lint`, `npm run test:flows` and manual visual checks pass on the branch. Run `npm run dev` while executing flow tests in a second terminal. Pay particular attention to shared-cart invitation joining, removal/restoration, profile editing, order reviews and the employee dashboard.
+
+### Lint migration note
+
+Phase 2 also fixes React's ref mutation warnings by synchronizing callback/data refs after commits, uses Next's client-side link component for the home navigation, and removes unused imports. The original code extensively uses `any` around untyped JSON and D1 results; ESLint's `no-explicit-any` rule is temporarily exempted **only in those legacy and extracted modules**, rather than disabling it project-wide. This avoids changing runtime data semantics during this behavior-preserving refactor. Properly typed API action payloads, database rows and client snapshots should be introduced gradually in a later PR; the exception should then be removed. The TypeScript compiler remains enabled.
