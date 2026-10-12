@@ -1,10 +1,11 @@
 'use client';
 import { Package, Check, CheckCircle2, Clock, UserRound, CreditCard, Star } from 'lucide-react';
 import { money } from '../catalog';
+import type { Snapshot } from '../types';
 const statuses = ['confirmed', 'preparing', 'ready', 'collected'];
 const statusLabel: Record<string, string> = { confirmed: 'Order confirmed', preparing: 'Getting it together', ready: 'Ready for pickup', collected: 'Picked up' };
 
-type Props = { data: any; onShop: () => void; onReview: (order: any) => void };
+type Props = { data: Snapshot; onShop: () => void; onReview: (order: any) => void };
 
 /** Customer order history, progress, receipts, and review affordances. */
 export default function OrdersPage({data,onShop,onReview}: Props) {
