@@ -19,7 +19,7 @@ function check(ok: any, message: string, status = 400): asserts ok { if (!ok)
 async function rows(sql: string, ...values: any[]) { return (await db().prepare(sql).bind(...values).all<any>()).results; }
 const safeUser = (u: any) => u ? { id: u.id, email: u.email, name: u.name, phone: u.phone, address: u.address, payment: u.payment, role: u.role, store: u.store } : null;
 async function allowed(cartId: string, user: any) { const c = await db().prepare('SELECT * FROM carts WHERE id=?').bind(cartId).first<any>(); check(c, 'Cart not found', 404); check(c.owner === user.id || await db().prepare('SELECT user FROM members WHERE cart=? AND user=?').bind(c.id, user.id).first(), 'You do not have access to this cart', 403); return c; }
-async function snapshot(user: any) { const edits = await rows('SELECT * FROM store_edits'); const catalog = stores.map(s => ({ ...s, ...edits.find(e => e.id === s.id) })); const reviews = await rows('SELECT r.*,u.name FROM reviews r JOIN users u ON u.id=r.owner ORDER BY r.created DESC'); const cs = user ? await rows("SELECT DISTINCT c.*,u.name AS owner_name FROM carts c JOIN users u ON u.id=c.owner LEFT JOIN members m ON m.cart=c.id WHERE (c.owner=? OR m.user=?) AND c.status='open'", user.id, user.id) : []; const cartData = await Promise.all(cs.map(async (c) => ({ ...c, items: await rows('SELECT product,quantity FROM items WHERE cart=?', c.id), members: await rows('SELECT u.name FROM members m JOIN users u ON u.id=m.user WHERE m.cart=?', c.id) }))); const os = user ? await rows('SELECT * FROM orders WHERE owner=? ORDER BY created DESC', user.id) : []; const employeeOrders = user?.role === 'employee' ? await rows('SELECT o.*,u.name AS customer FROM orders o JOIN users u ON u.id=o.owner WHERE o.store=? ORDER BY o.created DESC', user.store) : []; return { user: safeUser(user), stores: catalog, stock: await rows('SELECT * FROM stock'), reviews, carts: cartData, orders: os.map(o => ({ ...o, lines: JSON.parse(o.lines) })), employeeOrders: employeeOrders.map(o => ({ ...o, lines: JSON.parse(o.lines) })) }; }
+async function snapshot(user: any) { const edits = await rows('SELECT * FROM store_edits'); const catalog = stores.map(s => ({ ...s, ...edits.find(e => e.id === s.id) })); const reviews = await rows('SELECT r.*,u.name FROM reviews r JOIN users u ON u.id=r.owner ORDER BY r.created DESC'); const cs = user ? await rows("SELECT DISTINCT c.*,u.name AS owner_name FROM carts c JOIN users u ON u.id=c.owner LEFT JOIN members m ON m.cart=c.id WHERE (c.owner=? OR m.user=?) AND c.status='open'", user.id, user.id) : []; const cartData = await Promise.all(cs.map(async (c) => ({ ...c, items: await rows('SELECT product,quantity FROM items WHERE cart=?', c.id), members: await rows('SELECT u.id,u.name FROM members m JOIN users u ON u.id=m.user WHERE m.cart=?', c.id), removedMembers: c.owner === user.id ? await rows('SELECT u.id,u.name FROM removed_members m JOIN users u ON u.id=m.user WHERE m.cart=?', c.id) : [] }))); const os = user ? await rows('SELECT * FROM orders WHERE owner=? ORDER BY created DESC', user.id) : []; const employeeOrders = user?.role === 'employee' ? await rows('SELECT o.*,u.name AS customer FROM orders o JOIN users u ON u.id=o.owner WHERE o.store=? ORDER BY o.created DESC', user.store) : []; return { user: safeUser(user), stores: catalog, stock: await rows('SELECT * FROM stock'), reviews, carts: cartData, orders: os.map(o => ({ ...o, lines: JSON.parse(o.lines) })), employeeOrders: employeeOrders.map(o => ({ ...o, lines: JSON.parse(o.lines) })) }; }
 function failure(e: any) { if (!e.status) console.error(e); return Response.json({ error: e.status ? e.message : 'We could not complete this request. Your changes have not been discarded; please retry.' }, { status: e.status || 500 }); }
 export async function GET() { try {
     await seed();
@@ -84,14 +84,37 @@ export async function POST(request: Request) {
                 check(typeof a.share === 'string' && a.share.length <= 80, 'Invalid invitation');
                 const c = await d.prepare("SELECT * FROM carts WHERE share=? AND status='open'").bind(a.share).first<any>();
                 check(c, 'This shared cart is no longer available', 404);
-                if (c.owner !== u.id)
-                    await d.prepare('INSERT OR IGNORE INTO members(cart,user) VALUES(?,?)').bind(c.id, u.id).run();
+                if (c.owner !== u.id) {
+                    check(!await d.prepare('SELECT 1 FROM removed_members WHERE cart=? AND user=?').bind(c.id, u.id).first(), 'The cart owner removed your access to this cart', 403);
+                    const joined = await d.prepare("INSERT OR IGNORE INTO members(cart,user) SELECT ?,? WHERE EXISTS(SELECT 1 FROM carts WHERE id=? AND status='open') AND NOT EXISTS(SELECT 1 FROM removed_members WHERE cart=? AND user=?)").bind(c.id, u.id, c.id, c.id, u.id).run();
+                    check(joined.meta.changes || await d.prepare('SELECT 1 FROM members WHERE cart=? AND user=?').bind(c.id, u.id).first(), 'This invitation is no longer available to you', 403);
+                }
                 result = { cartId: c.id };
             }
-            else if (['item', 'share', 'checkout'].includes(a.action)) {
+            else if (['item', 'share', 'checkout', 'removeMember', 'restoreMember'].includes(a.action)) {
                 const c = await allowed(a.cart, u);
                 check(c.status === 'open', 'This cart has already been checked out', 409);
-                if (a.action === 'item') {
+                if (a.action === 'removeMember' || a.action === 'restoreMember') {
+                    check(c.owner === u.id, 'Only the cart owner can manage members', 403);
+                    check(typeof a.member === 'string' && a.member.length > 0 && a.member.length <= 100, 'Choose a valid member');
+                    check(a.member !== u.id, 'The cart owner cannot be removed');
+                    if (a.action === 'removeMember') {
+                        check(await d.prepare('SELECT 1 FROM members WHERE cart=? AND user=?').bind(c.id, a.member).first(), 'This person is not a member of the cart', 404);
+                        await d.batch([
+                            d.prepare('INSERT OR IGNORE INTO removed_members(cart,user) VALUES(?,?)').bind(c.id, a.member),
+                            d.prepare('DELETE FROM members WHERE cart=? AND user=?').bind(c.id, a.member),
+                            d.prepare("UPDATE carts SET revision=revision+1 WHERE id=? AND status='open'").bind(c.id)
+                        ]);
+                    } else {
+                        check(await d.prepare('SELECT 1 FROM removed_members WHERE cart=? AND user=?').bind(c.id, a.member).first(), 'This person was not removed from this cart', 404);
+                        await d.batch([
+                            d.prepare('DELETE FROM removed_members WHERE cart=? AND user=?').bind(c.id, a.member),
+                            d.prepare("INSERT OR IGNORE INTO members(cart,user) SELECT ?,? WHERE EXISTS(SELECT 1 FROM carts WHERE id=? AND status='open')").bind(c.id, a.member, c.id),
+                            d.prepare("UPDATE carts SET revision=revision+1 WHERE id=? AND status='open'").bind(c.id)
+                        ]);
+                    }
+                }
+                else if (a.action === 'item') {
                     const p = products.find(p => p.id === a.product);
                     check(p, 'Product not found');
                     check(a.delta === 1 || a.delta === -1, 'Invalid quantity');
@@ -138,7 +161,7 @@ export async function POST(request: Request) {
                         lines.push({ ...it, name: p.name, price });
                     }
                     const fee = 299, tax = Math.round((subtotal + fee) * .07), id = c.store.toUpperCase().slice(0, 3) + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
-                    const r = await d.batch([d.prepare("INSERT INTO orders(id,cart,owner,store,created,pickup,person,payment,subtotal,fee,tax,lines) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM carts WHERE id=? AND status='open' AND revision=?)").bind(id, c.id, u.id, c.store, Date.now(), new Date(pickup).toISOString(), person, a.payment, subtotal, fee, tax, JSON.stringify(lines), c.id, c.revision), d.prepare("UPDATE carts SET status='closed' WHERE id=? AND EXISTS(SELECT 1 FROM orders WHERE cart=?)").bind(c.id, c.id)]);
+                    const r = await d.batch([d.prepare("INSERT INTO orders(id,cart,owner,store,created,pickup,person,payment,subtotal,fee,tax,lines) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM carts WHERE id=? AND status='open' AND revision=?)").bind(id, c.id, u.id, c.store, Date.now(), new Date(pickup).toISOString(), person, a.payment, subtotal, fee, tax, JSON.stringify(lines), c.id, c.revision), d.prepare("UPDATE carts SET status='closed',share=NULL WHERE id=? AND EXISTS(SELECT 1 FROM orders WHERE cart=?)").bind(c.id, c.id), d.prepare("DELETE FROM members WHERE cart=? AND EXISTS(SELECT 1 FROM orders WHERE cart=?)").bind(c.id, c.id)]);
                     check(r[0].meta.changes, 'Your cart changed during checkout. Review it and try again.', 409);
                     result = { orderId: id };
                 }
