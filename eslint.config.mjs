@@ -14,6 +14,22 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    // Legacy API and UI modules use dynamic D1 rows and JSON payloads. Keep the
+    // original typing policy scoped here until explicit domain models can replace
+    // these pre-existing 'any' annotations in a separate, tested migration.
+    files: [
+      "app/gather.tsx",
+      "app/types.ts",
+      "app/api/gather/**/*.{ts,tsx}",
+      "app/components/orders-page.tsx",
+      "app/components/shared-carts-page.tsx",
+      "app/components/account-page.tsx",
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {
       // These files are vendored verbatim from shadcn@4.17.0. Keep the
