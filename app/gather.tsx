@@ -6,15 +6,7 @@ import ProductCard from './components/product-card';
 import OrdersPage from './components/orders-page';
 import SharedCartsPage from './components/shared-carts-page';
 import AccountPage from './components/account-page';
-type Snapshot = {
-    user: any;
-    stores: any[];
-    stock: any[];
-    carts: any[];
-    orders: any[];
-    employeeOrders: any[];
-    reviews: any[];
-};
+import type { Snapshot } from './types';
 const empty: Snapshot = { user: null, stores: initialStores, stock: [], carts: [], orders: [], employeeOrders: [], reviews: [] };
 const statuses = ['confirmed', 'preparing', 'ready', 'collected'];
 const statusLabel: Record<string, string> = { confirmed: 'Order confirmed', preparing: 'Getting it together', ready: 'Ready for pickup', collected: 'Picked up' };
