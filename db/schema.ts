@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core';
 export const users = sqliteTable('users', { id: text('id').primaryKey(), email: text('email').notNull().unique(), name: text('name').notNull(), password: text('password').notNull(), phone: text('phone').notNull().default(''), address: text('address').notNull().default(''), payment: text('payment').notNull().default('test-visa'), role: text('role').notNull().default('customer'), store: text('store') });
 export const sessions = sqliteTable('sessions', { id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => users.id), expires: integer('expires').notNull() });
 export const carts = sqliteTable('carts', { id: text('id').primaryKey(), owner: text('owner').notNull().references(() => users.id), store: text('store').notNull(), share: text('share').unique(), status: text('status').notNull().default('open'), revision: integer('revision').notNull().default(0) }, t => [index('idx_carts_owner').on(t.owner)]);
