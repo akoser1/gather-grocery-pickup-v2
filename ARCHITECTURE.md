@@ -36,3 +36,23 @@ npm run dev
 While the development server is running, use another terminal to run `npm run test:flows`. Also manually check shopping, stock limits, shared-cart removal/rejoining, checkout, and order history.
 
 This is a deliberate incremental architectural refactor, not a rewrite. Subsequent splits of the larger page/controller and POST action dispatcher should be performed separately, with tests after each step.
+
+## Phase 2: feature boundaries
+
+The client controller in `app/gather.tsx` retains navigation, async state management, and modal orchestration. The following **presentational feature pages** now receive their data and callbacks as props, preserving the same DOM markup and event behavior:
+
+- `app/components/orders-page.tsx`: order history, pickup progress and review entry points.
+- `app/components/shared-carts-page.tsx`: invitations, member removal/restoration, and shared-cart navigation.
+- `app/components/account-page.tsx`: account settings and profile submission.
+- `app/types.ts`: the shared typed snapshot contract for feature components and parent state.
+
+The existing `POST /api/gather` action dispatcher still handles all requests at the same URL. Two independent responsibilities are now delegated to functions without altering action names or responses:
+
+- `app/api/gather/actions/reviews.ts`: submission and validation of customer reviews.
+- `app/api/gather/actions/employee.ts`: employee order status, inventory, and store administration.
+
+The shopping view, cart sidebar and checkout modal remain in the controller for a later, separately tested extraction. The cart and checkout authorization/database semantics have **not** been changed. This refactor adds no migrations and makes no deliberate behavioral changes.
+
+### Verification gate
+
+This change should be merged only after `npm run typecheck`, `npm run lint`, `npm run test:flows` and manual visual checks pass on the branch. Run `npm run dev` while executing flow tests in a second terminal. Pay particular attention to shared-cart invitation joining, removal/restoration, profile editing, order reviews and the employee dashboard.
