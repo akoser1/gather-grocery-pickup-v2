@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, MapPin, Search, Plus, Minus, ShoppingCart, Package, Users, UserRound, LogOut, Store, Star, Clock, X, SlidersHorizontal, LockKeyhole, Share2, Check, Leaf, CreditCard, LoaderCircle, Navigation, ChevronDown, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
+import { ShoppingBag, MapPin, Search, Plus, Minus, ShoppingCart, Package, Users, UserRound, LogOut, Store, Star, Clock, X, SlidersHorizontal, LockKeyhole, Share2, Check, Leaf, LoaderCircle, Navigation, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { products, stores as initialStores, categories, priceFor, money } from './catalog';
 import ProductCard from './components/product-card';
 import OrdersPage from './components/orders-page';
@@ -33,7 +34,7 @@ export default function Gather() {
         }
     } }; document.addEventListener('keydown', handle); return () => { document.removeEventListener('keydown', handle); document.body.style.overflow = ''; previous?.focus(); }; }, [modal]);
     const dataRef = useRef(data);
-    dataRef.current = data;
+    useEffect(() => { dataRef.current = data; }, [data]);
     async function refresh() { try {
         const r = await fetch('/api/gather');
         const d: any = await r.json();
@@ -48,7 +49,7 @@ export default function Gather() {
     finally {
         setLoading(false);
     } }
-    useEffect(() => { void refresh(); }, []);
+    useEffect(() => { const timeout = setTimeout(() => { void refresh(); }, 0); return () => clearTimeout(timeout); }, []);
     useEffect(() => { const t = setInterval(() => { if (!busy)
         void refresh(); }, 15000); return () => clearInterval(t); }, [busy]);
     async function act(payload: any) { setBusy(true); setError(''); try {
@@ -94,7 +95,7 @@ export default function Gather() {
         setCartId(id);
     } const d = await act({ action: 'item', cart: id, product, delta }); return d ? { cartId: id, product, quantity: d.carts.find((c: any) => c.id === id)?.items.find((i: any) => i.product === product)?.quantity || 0 } : { error: 'Could not update cart' }; }
     const addRef = useRef(add);
-    addRef.current = add;
+    useEffect(() => { addRef.current = add; });
     useEffect(() => { const ctx = (document as any).modelContext; if (!ctx?.registerTool)
         return; const lifecycle = new AbortController(); for (const tool of [{ name: 'get_gather_cart', description: 'Read the visible grocery cart and its quantities.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, execute: () => { const d = dataRef.current; return { carts: d.carts.map(c => ({ id: c.id, store: c.store, items: c.items })) }; } }, { name: 'add_gather_product', description: 'Add one catalog product to the currently selected cart. Sign-in is required.', inputSchema: { type: 'object', properties: { productId: { type: 'string', enum: products.map(p => p.id) } }, required: ['productId'], additionalProperties: false }, annotations: { readOnlyHint: false }, execute: async (input: any) => { if (!input || Object.keys(input).length !== 1 || !products.some(p => p.id === input.productId))
                 throw new Error('Invalid productId'); return addRef.current(input.productId); } }])
@@ -127,7 +128,7 @@ export default function Gather() {
     function close() { setModal(''); setError(''); }
     const nav = [{ id: 'shop', label: 'Shop stores', Icon: Store }, { id: 'orders', label: 'My orders', Icon: Package }, { id: 'shared', label: 'Shared carts', Icon: Users }, { id: 'account', label: 'My account', Icon: UserRound }, ...(user?.role === 'employee' ? [{ id: 'employee', label: 'Employee desk', Icon: SlidersHorizontal }] : [])];
     return <div className="app">
-    <header className="topbar"><a className="wordmark" href="/" aria-label="Gather home"><span className="brand-icon"><ShoppingBag size={24}/></span>gather<span className="wordmark-dot">.</span></a><button className="location-button" onClick={() => setModal('location')}><MapPin size={19}/><span><small>Pickup near</small><strong>{location.label}</strong></span><ChevronDown size={15}/></button><div className="header-end"><span className="test-label">Class prototype</span><button className="header-account" onClick={() => user ? setView('account') : setModal('auth')}><UserRound size={19}/>{user ? user.name.split(' ')[0] : 'Sign in'}</button><button className="mobile-cart-button" onClick={() => setMobileCart(!mobileCart)} aria-label="Open cart"><ShoppingCart size={21}/><b>{count}</b></button></div></header>
+    <header className="topbar"><Link className="wordmark" href="/" aria-label="Gather home"><span className="brand-icon"><ShoppingBag size={24}/></span>gather<span className="wordmark-dot">.</span></Link><button className="location-button" onClick={() => setModal('location')}><MapPin size={19}/><span><small>Pickup near</small><strong>{location.label}</strong></span><ChevronDown size={15}/></button><div className="header-end"><span className="test-label">Class prototype</span><button className="header-account" onClick={() => user ? setView('account') : setModal('auth')}><UserRound size={19}/>{user ? user.name.split(' ')[0] : 'Sign in'}</button><button className="mobile-cart-button" onClick={() => setMobileCart(!mobileCart)} aria-label="Open cart"><ShoppingCart size={21}/><b>{count}</b></button></div></header>
     <div className="shell"><aside className="sidebar"><div className="nav-label">YOUR EVERYDAY</div><nav>{nav.map(n => <button key={n.id} className={view === n.id ? 'nav-item active' : 'nav-item'} onClick={() => { if (!user && n.id !== 'shop') {
         setModal('auth');
         return;
