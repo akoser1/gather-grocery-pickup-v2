@@ -16,4 +16,5 @@ export async function current() { const c = (await cookies()).get('gather_sessio
 export function check(ok: any, message: string, status = 400): asserts ok { if (!ok)
     throw Object.assign(new Error(message), { status }); }
 export async function rows(sql: string, ...values: any[]) { return (await db().prepare(sql).bind(...values).all<any>()).results; }
+export async function allowed(cartId: string, user: any) { const c = await db().prepare('SELECT * FROM carts WHERE id=?').bind(cartId).first<any>(); check(c, 'Cart not found', 404); check(c.owner === user.id || await db().prepare('SELECT user FROM members WHERE cart=? AND user=?').bind(c.id, user.id).first(), 'You do not have access to this cart', 403); return c; }
 export function failure(e: any) { if (!e.status) console.error(e); return Response.json({ error: e.status ? e.message : 'We could not complete this request. Your changes have not been discarded; please retry.' }, { status: e.status || 500 }); }
